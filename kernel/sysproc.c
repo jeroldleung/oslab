@@ -5,6 +5,43 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
+
+uint64
+sys_sysinfo(void)
+{
+  struct proc *p = myproc();
+  struct sysinfo sinfo;
+
+  // addr is a user virtual address, pointing to a struct sysinfo.
+  uint64 addr;
+  argaddr(0, &addr);
+
+  // collet the amount of free memory
+  sinfo.freemem = kfreememcount();
+
+  // collet the number of processes
+  sinfo.nproc = proccount();
+
+  // copy from kernel space to user space
+  if(copyout(p->pagetable, addr, (char *)&sinfo, sizeof(sinfo)) < 0)
+    return -1;
+  return 0;
+}
+
+uint64
+sys_trace(void)
+{
+  int mask;
+  struct proc *p = myproc();
+
+  argint(0, &mask); // get the mask from user space
+  if(mask < 0)
+    return -1;
+
+  p->mask = mask;
+  return 0;
+}
 
 uint64
 sys_exit(void)

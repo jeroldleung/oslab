@@ -1,0 +1,19 @@
+Looking at the backtrace output, which function called syscall?
+  * the usertrap() at kernel/trap.c:67 called syscall
+
+What is the value of p->trapframe->a7 and what does that value represent? 
+  * li a7, SYS_exec (SYS_exec is 7 defined at kernel/syscall.h)
+
+What was the previous mode that the CPU was in?
+  * machine mode
+
+Write down the assembly instruction the kernel is panicing at. Which register corresponds to the varialable num?
+  * 80001ff8:	00002683          	lw	a3,0(zero) # 0 <_entry-0x80000000>
+  * a3 corresponds to the variable num
+
+Why does the kernel crash? Hint: look at figure 3-3 in the text; is address 0 mapped in the kernel address space? 
+Is that confirmed by the value in scause above?
+  * scause: 0x000000000000000d which means: Load page fault
+
+
+In Conlcusion
