@@ -1,0 +1,16 @@
+Which other xv6 system call(s) could be made faster using this shared page? 
+Explain how.
+ - System calls that must cross the kernel to fetch some information 
+   are available to using this shared page for speed up. E.g. read, 
+   fstat, chdir etc.
+
+Explain the output of vmprint in terms of Fig 3-4 from the text. What does 
+page 0 contain? What is in page 2? When running in user mode, could the 
+process read/write the memory mapped by page 1? What does the third to 
+last page contain?
+ - Page 0 contains the text and data.
+   page 2 contains the stack. 
+   Page 1 contains is the guard page, user cannot read and write to it.
+   Page 511 is the trampoline page.
+   Page 510 is the trapframe page.
+

@@ -75,6 +75,29 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  int size;
+  uint64 va, umask, kmask;
+  struct proc *p = myproc();
+
+  // fetch system call argument
+  argaddr(0, &va);
+  argint(1, &size);
+  argaddr(2, &umask);
+  if(va < 0 || size < 0 || umask < 0) { return -1; } // cannot fetch from user space
+  kmask = 0;
+
+  // find the PTE for va
+  for(int i = 0; i < size; i++){
+    pte_t *pte = walk(p->pagetable, va + i*PGSIZE, 0);
+    if(*pte & PTE_A){
+      kmask |= 1 << i;
+    }
+    // remember to clean PTE_A after checking
+    *pte &= ~PTE_A;
+  }
+
+  if(copyout(p->pagetable, umask, (char *)(&kmask), sizeof(kmask)) < 0)
+    return -1;
   return 0;
 }
 #endif
