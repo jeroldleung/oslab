@@ -77,8 +77,50 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2) {
+    acquire(&tickslock);
+    if(p->alarm.interval > 0 && p->alarm.running == 0 && ticks - p->alarm.lasttick >= p->alarm.interval) {
+      p->alarm.running = 1;
+      p->alarm.lasttick = ticks;
+      // save the state
+      p->alarm.epc = p->trapframe->epc;
+      p->alarm.ra = p->trapframe->ra;
+      p->alarm.sp = p->trapframe->sp;
+      p->alarm.gp = p->trapframe->gp;
+      p->alarm.tp = p->trapframe->tp;
+      p->alarm.t0 = p->trapframe->t0;
+      p->alarm.t1 = p->trapframe->t1;
+      p->alarm.t2 = p->trapframe->t2;
+      p->alarm.s0 = p->trapframe->s0;
+      p->alarm.s1 = p->trapframe->s1;
+      p->alarm.a0 = p->trapframe->a0;
+      p->alarm.a1 = p->trapframe->a1;
+      p->alarm.a2 = p->trapframe->a2;
+      p->alarm.a3 = p->trapframe->a3;
+      p->alarm.a4 = p->trapframe->a4;
+      p->alarm.a5 = p->trapframe->a5;
+      p->alarm.a6 = p->trapframe->a6;
+      p->alarm.a7 = p->trapframe->a7;
+      p->alarm.s2 = p->trapframe->s2;
+      p->alarm.s3 = p->trapframe->s3;
+      p->alarm.s4 = p->trapframe->s4;
+      p->alarm.s5 = p->trapframe->s5;
+      p->alarm.s6 = p->trapframe->s6;
+      p->alarm.s7 = p->trapframe->s7;
+      p->alarm.s8 = p->trapframe->s8;
+      p->alarm.s9 = p->trapframe->s9;
+      p->alarm.s10 = p->trapframe->s10;
+      p->alarm.s11 = p->trapframe->s11;
+      p->alarm.t3 = p->trapframe->t3;
+      p->alarm.t4 = p->trapframe->t4;
+      p->alarm.t5 = p->trapframe->t5;
+      p->alarm.t6 = p->trapframe->t6;
+      // go to the alarm handler
+      p->trapframe->epc = p->alarm.handler;
+    }
+    release(&tickslock);
     yield();
+  }
 
   usertrapret();
 }

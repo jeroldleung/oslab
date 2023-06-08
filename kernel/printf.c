@@ -133,3 +133,19 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void
+backtrace(void)
+{
+  uint64 curfp, prefp, curpg;
+  curfp = r_fp();
+  curpg = PGROUNDDOWN(curfp);
+  for(;;){
+    printf("%p\n", *((uint64*)(curfp-8)));
+    prefp = *(uint64*)(curfp - 16);
+    if(PGROUNDDOWN(prefp) != curpg){
+      break;
+    }
+    curfp = prefp;
+  }
+}
