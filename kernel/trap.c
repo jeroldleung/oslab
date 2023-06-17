@@ -16,6 +16,32 @@ void kernelvec();
 
 extern int devintr();
 
+// copy-on-write page fault
+int
+cowfault(pagetable_t pagetable, uint64 va)
+{
+  if(va >= MAXVA)
+    return -1;
+
+  pte_t *pte = walk(pagetable, va, 0);
+  if(pte == 0 || (*pte & PTE_U) == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_C) == 0)
+    return -1;
+
+  uint64 newpa = (uint64)kalloc();
+  if(newpa == 0)
+    return -1;
+
+  uint64 oldpa = PTE2PA(*pte);
+  memmove((void*)newpa, (void*)oldpa, PGSIZE);
+
+  uint flags = PTE_FLAGS(*pte);
+  *pte = PA2PTE(newpa) | flags | PTE_W;
+
+  kfree((void*)oldpa);
+
+  return 0;
+}
+
 void
 trapinit(void)
 {
@@ -65,6 +91,9 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 0xf){
+    if(cowfault(p->pagetable, r_stval()) < 0)
+      setkilled(p);
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
