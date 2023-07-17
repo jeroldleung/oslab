@@ -23,6 +23,15 @@
 #include "fs.h"
 #include "buf.h"
 
+#define NBUCKET 13
+
+struct bucket{
+  struct buf head;
+  struct spinlock lock;
+};
+
+struct bucket table[NBUCKET];
+
 struct {
   struct spinlock lock;
   struct buf buf[NBUF];
@@ -30,7 +39,7 @@ struct {
   // Linked list of all buffers, through prev/next.
   // Sorted by how recently the buffer was used.
   // head.next is most recent, head.prev is least.
-  struct buf head;
+  // struct buf head;
 } bcache;
 
 void
@@ -41,14 +50,17 @@ binit(void)
   initlock(&bcache.lock, "bcache");
 
   // Create linked list of buffers
-  bcache.head.prev = &bcache.head;
-  bcache.head.next = &bcache.head;
+  for(int i = 0; i < NBUCKET; i++){
+    table[i].head.prev = &table[i].head;
+    table[i].head.next = &table[i].head;
+    initlock(&table[i].lock, "bcache.bucket");
+  }
   for(b = bcache.buf; b < bcache.buf+NBUF; b++){
-    b->next = bcache.head.next;
-    b->prev = &bcache.head;
+    b->next = table[0].head.next;
+    b->prev = &table[0].head;
     initsleeplock(&b->lock, "buffer");
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
+    table[0].head.next->prev = b;
+    table[0].head.next = b;
   }
 }
 
@@ -59,14 +71,17 @@ static struct buf*
 bget(uint dev, uint blockno)
 {
   struct buf *b;
+  int key;
 
-  acquire(&bcache.lock);
+  key = blockno % NBUCKET;
+
+  acquire(&table[key].lock);
 
   // Is the block already cached?
-  for(b = bcache.head.next; b != &bcache.head; b = b->next){
+  for(b = table[key].head.next; b != &table[key].head; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
-      release(&bcache.lock);
+      release(&table[key].lock);
       acquiresleep(&b->lock);
       return b;
     }
@@ -74,17 +89,43 @@ bget(uint dev, uint blockno)
 
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
-  for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
+  for(b = table[key].head.prev; b != &table[key].head; b = b->prev){
     if(b->refcnt == 0) {
+findfreebuf:
       b->dev = dev;
       b->blockno = blockno;
       b->valid = 0;
       b->refcnt = 1;
-      release(&bcache.lock);
+      release(&table[key].lock);
       acquiresleep(&b->lock);
       return b;
     }
   }
+
+  // steal free buffer from other buckets
+  release(&table[key].lock);
+  acquire(&bcache.lock);
+  for(int i = 0; i < NBUCKET; i++){
+    if(i == key)
+      continue;
+    acquire(&table[i].lock);
+    for(b = table[i].head.prev; b != &table[i].head; b = b->prev){
+      if(b->refcnt == 0) {
+        acquire(&table[key].lock);
+        b->next->prev = b->prev;
+        b->prev->next = b->next;
+        b->next = table[key].head.next;
+        b->prev = &table[key].head;
+        table[key].head.next->prev = b;
+        table[key].head.next = b;
+        release(&table[i].lock);
+        release(&bcache.lock);
+	goto findfreebuf;
+      }
+    }
+    release(&table[i].lock);
+  }
+
   panic("bget: no buffers");
 }
 
@@ -116,38 +157,44 @@ bwrite(struct buf *b)
 void
 brelse(struct buf *b)
 {
+  int key;
+
   if(!holdingsleep(&b->lock))
     panic("brelse");
 
   releasesleep(&b->lock);
 
-  acquire(&bcache.lock);
+  key = b->blockno % NBUCKET;
+
+  acquire(&table[key].lock);
   b->refcnt--;
   if (b->refcnt == 0) {
     // no one is waiting for it.
     b->next->prev = b->prev;
     b->prev->next = b->next;
-    b->next = bcache.head.next;
-    b->prev = &bcache.head;
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
+    b->next = table[key].head.next;
+    b->prev = &table[key].head;
+    table[key].head.next->prev = b;
+    table[key].head.next = b;
   }
   
-  release(&bcache.lock);
+  release(&table[key].lock);
 }
 
 void
 bpin(struct buf *b) {
-  acquire(&bcache.lock);
+  int key = b->blockno % NBUCKET;
+  acquire(&table[key].lock);
   b->refcnt++;
-  release(&bcache.lock);
+  release(&table[key].lock);
 }
 
 void
 bunpin(struct buf *b) {
-  acquire(&bcache.lock);
+  int key = b->blockno % NBUCKET;
+  acquire(&table[key].lock);
   b->refcnt--;
-  release(&bcache.lock);
+  release(&table[key].lock);
 }
 
 
