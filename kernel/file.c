@@ -180,3 +180,10 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+void
+mmapread(struct file *f, uint64 ka, int off)
+{
+  ilock(f->ip);
+  readi(f->ip, 0, ka, off, PGSIZE);
+  iunlock(f->ip);
+}
